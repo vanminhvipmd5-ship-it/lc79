@@ -8,19 +8,17 @@ const rateLimit = require("express-rate-limit");
 const app = express();
 app.use(express.json());
 
-/**
- * ⚙️ CONFIG
- */
-const SECRET_KEY = process.env.SECRET_KEY || "vanminh_dep_trai";
+const PORT = process.env.PORT || 3000;
+const SECRET_KEY = process.env.SECRET_KEY;
 
 /**
- * 👑 ADMIN (hardcode)
+ * 👑 ADMIN
  * password: 123456
  */
 const admins = [
   {
     username: "vanminh2603",
-    password: "$2a$10$7QJ9wZlYQ9QK1nC1mQzX9e1Vw0v5QzYt6QZcH8H0zR0sZl9R6Hk9K",
+    password: bcrypt.hashSync("123456", 10),
     role: "admin"
   }
 ];
@@ -28,48 +26,40 @@ const admins = [
 /**
  * 🛡️ RATE LIMIT
  */
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 100
-});
-
-app.use(limiter);
+app.use(
+  rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 100
+  })
+);
 
 /**
- * 🔐 AUTH MIDDLEWARE
+ * 🔐 AUTH
  */
 function authenticateToken(req, res, next) {
-  const authHeader = req.headers["authorization"];
-  const token = authHeader && authHeader.split(" ")[1];
+  const authHeader = req.headers.authorization;
 
-  if (!token) return res.status(401).json({ message: "Thiếu token" });
+  if (!authHeader) {
+    return res.status(401).json({ message: "Thiếu token" });
+  }
 
-  jwt.verify(token, SECRET_KEY, (err, user) => {
-    if (err) return res.status(403).json({ message: "Token không hợp lệ" });
+  const token = authHeader.split(" ")[1];
+
+  try {
+    const user = jwt.verify(token, SECRET_KEY);
     req.user = user;
     next();
-  });
+  } catch (err) {
+    return res.status(403).json({ message: "Token lỗi" });
+  }
 }
 
 /**
- * 👑 ADMIN CHECK
+ * 👑 CHECK ADMIN
  */
 function requireAdmin(req, res, next) {
   if (req.user.role !== "admin") {
-    return res.status(403).json({ message: "Cần quyền admin" });
-  }
-  next();
-}
-
-/**
- * 🌐 (OPTION) CHECK IP ADMIN
- */
-const allowedIPs = ["127.0.0.1", "::1"];
-
-function checkIP(req, res, next) {
-  const ip = req.ip;
-  if (!allowedIPs.includes(ip)) {
-    return res.status(403).json({ message: "IP không được phép" });
+    return res.status(403).json({ message: "Không đủ quyền" });
   }
   next();
 }
@@ -81,12 +71,14 @@ app.post("/login", async (req, res) => {
   const { username, password } = req.body;
 
   const user = admins.find(u => u.username === username);
+
   if (!user) {
     return res.status(401).json({ message: "Sai tài khoản" });
   }
 
-  const isMatch = await bcrypt.compare(password, user.password);
-  if (!isMatch) {
+  const match = await bcrypt.compare(password, user.password);
+
+  if (!match) {
     return res.status(401).json({ message: "Sai mật khẩu" });
   }
 
@@ -96,64 +88,33 @@ app.post("/login", async (req, res) => {
     { expiresIn: "12h" }
   );
 
-  console.log(`✅ Admin login: ${username}`);
-
   res.json({ token });
 });
 
 /**
- * 🌍 PUBLIC API
+ * 🌍 PUBLIC
  */
-app.get("/api/data", (req, res) => {
-  res.json({ message: "API public OK" });
+app.get("/", (req, res) => {
+  res.send("API chạy OK 🚀");
 });
 
 /**
- * 🔓 USER API
+ * 🔓 USER
  */
 app.get("/api/user", authenticateToken, (req, res) => {
-  res.json({
-    message: "User OK",
-    user: req.user
-  });
+  res.json(req.user);
 });
 
 /**
- * 👑 ADMIN API
+ * 👑 ADMIN
  */
-app.get(
-  "/api/admin",
-  authenticateToken,
-  requireAdmin,
-  // checkIP, // bật nếu cần
-  (req, res) => {
-    res.json({
-      message: "Admin toàn quyền 👑",
-      user: req.user
-    });
-  }
-);
+app.get("/api/admin", authenticateToken, requireAdmin, (req, res) => {
+  res.json({ message: "Admin OK 👑" });
+});
 
 /**
- * 🧠 API QUẢN LÝ (ví dụ cho soi cầu)
+ * 🚀 START
  */
-app.post(
-  "/api/admin/update",
-  authenticateToken,
-  requireAdmin,
-  (req, res) => {
-    console.log("⚙️ Admin update:", req.body);
-
-    res.json({
-      message: "Đã cập nhật hệ thống",
-      data: req.body
-    });
-  }
-);
-
-/**
- * 🚀 START SERVER
- */
-app.listen(3000, () => {
-  console.log("🚀 Server chạy tại http://localhost:3000");
+app.listen(PORT, () => {
+  console.log(`Server chạy tại http://localhost:${PORT}`);
 });
