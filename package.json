@@ -1,120 +1,20 @@
-require("dotenv").config();
-
-const express = require("express");
-const jwt = require("jsonwebtoken");
-const bcrypt = require("bcryptjs");
-const rateLimit = require("express-rate-limit");
-
-const app = express();
-app.use(express.json());
-
-const PORT = process.env.PORT || 3000;
-const SECRET_KEY = process.env.SECRET_KEY;
-
-/**
- * 👑 ADMIN
- * password: 123456
- */
-const admins = [
-  {
-    username: "vanminh2603",
-    password: bcrypt.hashSync("123456", 10),
-    role: "admin"
-  }
-];
-
-/**
- * 🛡️ RATE LIMIT
- */
-app.use(
-  rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 100
-  })
-);
-
-/**
- * 🔐 AUTH
- */
-function authenticateToken(req, res, next) {
-  const authHeader = req.headers.authorization;
-
-  if (!authHeader) {
-    return res.status(401).json({ message: "Thiếu token" });
-  }
-
-  const token = authHeader.split(" ")[1];
-
-  try {
-    const user = jwt.verify(token, SECRET_KEY);
-    req.user = user;
-    next();
-  } catch (err) {
-    return res.status(403).json({ message: "Token lỗi" });
+{
+  "name": "api-soi-cau-v2",
+  "version": "1.2.0",
+  "description": "API Fetch dữ liệu và dự đoán Tài/Xỉu chuẩn tiếng Việt",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "author": "vanminh2603",
+  "contributors": [
+    {
+      "name": "vanminh2603",
+      "role": "admin"
+    }
+  ],
+  "dependencies": {
+    "axios": "^1.6.0",
+    "express": "^4.18.2"
   }
 }
-
-/**
- * 👑 CHECK ADMIN
- */
-function requireAdmin(req, res, next) {
-  if (req.user.role !== "admin") {
-    return res.status(403).json({ message: "Không đủ quyền" });
-  }
-  next();
-}
-
-/**
- * 🔐 LOGIN
- */
-app.post("/login", async (req, res) => {
-  const { username, password } = req.body;
-
-  const user = admins.find(u => u.username === username);
-
-  if (!user) {
-    return res.status(401).json({ message: "Sai tài khoản" });
-  }
-
-  const match = await bcrypt.compare(password, user.password);
-
-  if (!match) {
-    return res.status(401).json({ message: "Sai mật khẩu" });
-  }
-
-  const token = jwt.sign(
-    { username: user.username, role: user.role },
-    SECRET_KEY,
-    { expiresIn: "12h" }
-  );
-
-  res.json({ token });
-});
-
-/**
- * 🌍 PUBLIC
- */
-app.get("/", (req, res) => {
-  res.send("API chạy OK 🚀");
-});
-
-/**
- * 🔓 USER
- */
-app.get("/api/user", authenticateToken, (req, res) => {
-  res.json(req.user);
-});
-
-/**
- * 👑 ADMIN
- */
-app.get("/api/admin", authenticateToken, requireAdmin, (req, res) => {
-  res.json({ message: "Admin OK 👑" });
-});
-
-/**
- * 🚀 START
- */
-app.listen(PORT, () => {
-  console.log(`Server chạy tại http://localhost:${PORT}`);
-});
